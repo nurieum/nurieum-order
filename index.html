@@ -98,7 +98,7 @@ window.addEventListener('message', async e => {
   appWin = e.source;
   switch (d.t) {
     case 'ready':
-      send({ t: 'hello', dev, mine: get('nr_mine', []), adm: get('nr_adm', ''), standalone: IS_STANDALONE, admin: OPEN_ADMIN, openMine: OPEN_MINE, a2off: get('nr_a2off', false), me: get('nr_me2', null), draft: get('nr_draft', null) });
+      send({ t: 'hello', dev, mine: get('nr_mine', []), adm: get('nr_adm', ''), standalone: IS_STANDALONE, admin: OPEN_ADMIN, openMine: OPEN_MINE, a2off: get('nr_a2off', false), me: get('nr_me2', null), draft: get('nr_draft', null), perm: window.Notification ? Notification.permission : 'none' });
       break;
     case 'shown': hideSplash(); break;
     case 'mine': set('nr_mine', d.mine || []); break;
@@ -210,10 +210,12 @@ async function subscribe(tagK, tagV) {
   OS.User.addTag(tagK, tagV);
   return !!OS.User.PushSubscription.optedIn;
 }
-const BLOCKED = IS_IOS ? '알림이 꺼져 있어요. 아이폰 설정 → 알림 → 누리이음 ORDER → 알림 허용을 켜 주세요.'
-                       : '알림이 차단돼 있어요. 크롬 주소창 옆 자물쇠(또는 ⋮ → 설정 → 사이트 설정 → 알림)에서 허용해 주세요.';
+const BLOCKED = IS_IOS ? '알림이 꺼져 있어요. 아이폰 설정 → 알림 → 누리이음 ORDER → 알림 허용을 켠 뒤 다시 눌러 주세요.'
+  : IS_STANDALONE ? '알림이 차단돼 있어요. 홈 화면의 누리이음 ORDER 아이콘을 길게 누르고 → 앱 정보 → 알림 → 허용으로 바꾼 뒤 다시 눌러 주세요.'
+  : '알림이 차단돼 있어요. 크롬 주소창 왼쪽 아이콘 → 권한(또는 사이트 설정) → 알림 → 허용으로 바꾼 뒤 다시 눌러 주세요.';
 async function pushOn() {
   if (IS_IOS && !IS_STANDALONE) return pushState();
+  if (window.Notification && Notification.permission === 'denied') return pushState(BLOCKED);
   const r = await permSheet('주문 알림 받기', '새 주문이 들어오면 이 폰으로 알려 드려요');
   if (r.cancel) return pushState();
   if (r.err) return pushState(r.err);
@@ -225,7 +227,8 @@ async function pushOn() {
 /* 직원 — 이 폰에서 넣은 주문이 출발하면 알림 (기기 번호로 구분) */
 async function meOn() {
   if (IS_IOS && !IS_STANDALONE) return { ok: false, needInstall: true };
-  const r = await permSheet('출발 알림 받기', '주문하신 음료가 출발하면 알려 드려요');
+  if (window.Notification && Notification.permission === 'denied') return { ok: false, blocked: true, err: BLOCKED };
+  const r = await permSheet('딜리버리 알림 받기', '음료가 출발할 때와 전달이 끝났을 때 알려 드려요');
   if (r.cancel) return { ok: false, cancel: true };
   if (r.err) return { ok: false, err: r.err };
   if (!r.perm) return { ok: false, err: BLOCKED };
