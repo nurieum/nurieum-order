@@ -231,11 +231,13 @@ async function meOn() {
   if (!r.perm) return { ok: false, err: BLOCKED };
   try { if (!await subscribe('dev', dev)) return { ok: false, err: '알림 등록이 끝나지 않았어요. 한 번 더 눌러 주세요.' } }
   catch (e) { return { ok: false, err: '알림을 켜지 못했어요: ' + e.message } }
-  return { ok: true };
+  return { ok: true, sid: OS.User.PushSubscription.id || '' };
 }
 /* 이미 허용한 폰은 열 때마다 조용히 이름표 다시 확인 (허용 창은 안 뜸) */
 if (get('nr_me2', null) && window.Notification && Notification.permission === 'granted' && !(IS_IOS && !IS_STANDALONE)) {
-  setTimeout(() => loadOS().then(() => { try { if (OS && OS.User.PushSubscription.optedIn) OS.User.addTag('dev', dev) } catch (e) {} }), 4000);
+  setTimeout(() => loadOS().then(() => {
+    try { if (OS && OS.User.PushSubscription.optedIn) { OS.User.addTag('dev', dev); if (OS.User.PushSubscription.id) send({ t: 'me-sid', sid: OS.User.PushSubscription.id }) } } catch (e) {}
+  }), 4000);
 }
 async function pushOff() {
   await loadOS();
