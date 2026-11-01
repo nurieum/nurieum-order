@@ -22,9 +22,10 @@ body{font-family:'Noto Sans KR',-apple-system,'Apple SD Gothic Neo','Malgun Goth
 #app{position:absolute;left:0;right:0;bottom:0;top:env(safe-area-inset-top);width:100%;height:calc(100% - env(safe-area-inset-top));border:0;display:block;background:var(--bg)}
 #splash{position:fixed;inset:0;z-index:20;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity .3s}
 #splash.hide{opacity:0;pointer-events:none}
-#splash img{width:120px;height:120px;border-radius:26px;border:1px solid var(--line)}
+#splash img{width:150px;height:150px;display:block}
 #splash .sp{width:28px;height:28px;border-radius:50%;border:3px solid var(--sky);border-top-color:var(--navy);animation:spin .8s linear infinite}
-#splash p{font-size:14px;color:var(--gray);font-weight:600}
+#splash p{font-size:14px;color:var(--gray);font-weight:600;white-space:nowrap}
+#splash p.err{white-space:normal}
 #splash .err{color:var(--red);text-align:center;line-height:1.6;padding:0 24px}
 #splash button{height:46px;padding:0 22px;background:var(--navy);color:#fff;border:0;font-size:15px;font-weight:700;font-family:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -47,14 +48,13 @@ body{font-family:'Noto Sans KR',-apple-system,'Apple SD Gothic Neo','Malgun Goth
 .sh-btns .ok{background:var(--navy);color:#fff}
 .sh-btns .off{flex:0 0 40%;border:1px solid var(--line);color:var(--gray);background:#fff}
 </style>
-<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 </head>
 <body>
-<div id="splash"><img src="apple-touch-icon.png" alt="누리이음 ORDER"><div class="sp" id="sp"></div><p id="spMsg">불러오는 중이에요</p></div>
+<div id="splash"><img src="icon-512.png" alt="누리이음 ORDER"><div class="sp" id="sp"></div><p id="spMsg">잠시만 기다려 주세요.</p></div>
 <iframe id="app" title="누리이음 카페 단체 주문" allow="clipboard-write"></iframe>
 <script>
 /* ===== ① Apps Script 배포 주소 (배포 후 여기만 바꾸면 됨) ===== */
-const EXEC_URL = 'https://script.google.com/macros/s/여기에_배포_주소/exec';
+const EXEC_URL = 'https://script.google.com/macros/s/AKfycbyM6-Eoi4ADC8T07AIhSQH7Hl-oaD8VleIokQAFRK3xRPmwD1t6Z4qhaRT-eUnA7imDHA/exec';
 /* ===== ② OneSignal ===== */
 const OS_APP_ID = '0656f30f-3182-4541-a141-a8918faab12a';
 const BASE = '/nurieum-order/';
@@ -67,7 +67,8 @@ const IS_INAPP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|everytimeApp
 const IS_STANDALONE = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 const qs = new URLSearchParams(location.search);
 const OPEN_ADMIN = qs.get('admin') === '1';
-if (OPEN_ADMIN) try { history.replaceState(null, '', location.pathname) } catch (e) {}
+const OPEN_MINE = qs.get('mine') === '1';
+if (OPEN_ADMIN || OPEN_MINE) try { history.replaceState(null, '', location.pathname) } catch (e) {}
 
 function get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v) } catch (e) { return d } }
 function set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) {} }
@@ -80,7 +81,7 @@ if (EXEC_URL.indexOf('여기에') >= 0) {
   $('sp').remove(); $('spMsg').className = 'err'; $('spMsg').innerHTML = '아직 주문 앱 주소가 연결되지 않았어요.<br>index.html의 EXEC_URL에 배포 주소를 넣어 주세요.';
 } else {
   $('app').src = EXEC_URL;
-  setTimeout(() => { if (!shown) { $('spMsg').textContent = '조금만 기다려 주세요…' } }, 6000);
+  setTimeout(() => { if (!shown) { $('spMsg').textContent = '거의 다 됐어요. 잠시만 기다려 주세요.' } }, 6000);
   setTimeout(() => {
     if (!shown) { $('sp').remove(); $('spMsg').className = 'err'; $('spMsg').innerHTML = '연결이 느려요. 인터넷 연결을 확인해 주세요.'; const b = document.createElement('button'); b.textContent = '다시 열기'; b.onclick = () => location.reload(); $('splash').appendChild(b) }
   }, 20000);
@@ -96,7 +97,7 @@ window.addEventListener('message', async e => {
   appWin = e.source;
   switch (d.t) {
     case 'ready':
-      send({ t: 'hello', dev, mine: get('nr_mine', []), adm: get('nr_adm', ''), standalone: IS_STANDALONE, admin: OPEN_ADMIN, a2off: get('nr_a2off', false) });
+      send({ t: 'hello', dev, mine: get('nr_mine', []), adm: get('nr_adm', ''), standalone: IS_STANDALONE, admin: OPEN_ADMIN, openMine: OPEN_MINE, a2off: get('nr_a2off', false), me: get('nr_me', null) });
       break;
     case 'shown': hideSplash(); break;
     case 'mine': set('nr_mine', d.mine || []); break;
@@ -105,6 +106,7 @@ window.addEventListener('message', async e => {
     case 'push-get': send(Object.assign({ t: 'push' }, await pushState())); break;
     case 'push-on': send(Object.assign({ t: 'push' }, await pushOn())); break;
     case 'push-off': send(Object.assign({ t: 'push' }, await pushOff())); break;
+    case 'me-on': { const m = await meOn(); set('nr_me', m.ok ? { ok: true } : null); send(Object.assign({ t: 'me-push' }, m)); break; }
   }
 });
 
@@ -138,27 +140,42 @@ function a2Sheet(kind) {
 }
 
 /* ===== 관리자 폰 알림 (OneSignal) ===== */
-let OS = null;
-const osReady = new Promise(res => {
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  OneSignalDeferred.push(async function (OneSignal) {
-    try {
-      await OneSignal.init({ appId: OS_APP_ID, serviceWorkerPath: BASE.slice(1) + 'OneSignalSDKWorker.js', serviceWorkerParam: { scope: BASE }, notifyButton: { enable: false } });
-      OS = OneSignal;
-    } catch (e) { console.warn('OneSignal', e) }
-    res();
+let OS = null, osP = null;
+/* 알림 기능은 관리자 화면 > 설정에 들어갔을 때만 불러옴 → 직원 폰에는 알림 팝업이 안 뜨고 첫 화면도 더 빨라짐 */
+function loadOS() {
+  if (osP) return osP;
+  osP = new Promise(res => {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function (OneSignal) {
+      try {
+        await OneSignal.init({
+          appId: OS_APP_ID,
+          serviceWorkerPath: BASE.slice(1) + 'OneSignalSDKWorker.js',
+          serviceWorkerParam: { scope: BASE },
+          notifyButton: { enable: false },
+          promptOptions: { slidedown: { prompts: [] } }   // 영어 자동 팝업 끄기
+        });
+        OS = OneSignal;
+      } catch (e) { console.warn('OneSignal', e) }
+      res();
+    });
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js'; sc.defer = true;
+    sc.onerror = () => res();
+    document.head.appendChild(sc);
+    setTimeout(res, 10000);
   });
-  setTimeout(res, 8000);
-});
+  return osP;
+}
 async function pushState(err) {
-  await osReady;
+  await loadOS();
   const needInstall = IS_IOS && !IS_STANDALONE;
   if (!OS) return { perm: false, sub: false, adm: false, needInstall, err: err || (needInstall ? '' : '알림 기능을 불러오지 못했어요. 새로고침해 주세요.') };
   let tags = {}; try { tags = OS.User.getTags() || {} } catch (e) {}
   return { perm: !!OS.Notifications.permission, sub: !!OS.User.PushSubscription.optedIn, adm: tags.role === 'admin', needInstall, err: err || '' };
 }
 async function pushOn() {
-  await osReady;
+  await loadOS();
   if (IS_IOS && !IS_STANDALONE) return pushState();
   if (!OS) return pushState();
   try {
@@ -170,8 +187,21 @@ async function pushOn() {
   } catch (e) { return pushState('알림을 켜지 못했어요: ' + e.message) }
   return pushState();
 }
+/* 직원 — 이 폰에서 넣은 주문이 출발하면 알림 (기기 번호로 구분) */
+async function meOn() {
+  if (IS_IOS && !IS_STANDALONE) return { ok: false, needInstall: true };
+  await loadOS();
+  if (!OS) return { ok: false, err: '알림 기능을 불러오지 못했어요. 잠시 후 다시 눌러 주세요.' };
+  try {
+    await OS.Notifications.requestPermission();
+    if (!OS.Notifications.permission) return { ok: false, err: '알림이 꺼져 있어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요.' };
+    await OS.User.PushSubscription.optIn();
+    OS.User.addTag('dev', dev);
+    return { ok: true };
+  } catch (e) { return { ok: false, err: '알림을 켜지 못했어요: ' + e.message } }
+}
 async function pushOff() {
-  await osReady;
+  await loadOS();
   try { if (OS) { await OS.User.PushSubscription.optOut(); OS.User.removeTag('role') } } catch (e) {}
   await new Promise(r => setTimeout(r, 500));
   return pushState();
