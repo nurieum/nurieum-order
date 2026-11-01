@@ -1,13 +1,13 @@
 {
-  "name": "누리이음 카페 주문 알림",
-  "short_name": "주문 알림",
+  "name": "누리이음 ORDER",
+  "short_name": "누리이음 ORDER",
   "start_url": "/nurieum-order/",
   "scope": "/nurieum-order/",
   "display": "standalone",
-  "background_color": "#0B2A5B",
-  "theme_color": "#0B2A5B",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }
