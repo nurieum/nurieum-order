@@ -46,6 +46,7 @@ body{font-family:'Noto Sans KR',-apple-system,'Apple SD Gothic Neo','Malgun Goth
 .sh-btns{display:flex;gap:8px}
 .sh-btns button{flex:1;height:50px;font-size:15px;font-weight:700;border:0;font-family:inherit}
 .sh-btns .ok{background:var(--navy);color:#fff}
+.sh-btns .ok:disabled{opacity:.55}
 .sh-btns .off{flex:0 0 40%;border:1px solid var(--line);color:var(--gray);background:#fff}
 </style>
 </head>
@@ -97,16 +98,17 @@ window.addEventListener('message', async e => {
   appWin = e.source;
   switch (d.t) {
     case 'ready':
-      send({ t: 'hello', dev, mine: get('nr_mine', []), adm: get('nr_adm', ''), standalone: IS_STANDALONE, admin: OPEN_ADMIN, openMine: OPEN_MINE, a2off: get('nr_a2off', false), me: get('nr_me', null) });
+      send({ t: 'hello', dev, mine: get('nr_mine', []), adm: get('nr_adm', ''), standalone: IS_STANDALONE, admin: OPEN_ADMIN, openMine: OPEN_MINE, a2off: get('nr_a2off', false), me: get('nr_me2', null), draft: get('nr_draft', null) });
       break;
     case 'shown': hideSplash(); break;
     case 'mine': set('nr_mine', d.mine || []); break;
+    case 'draft': set('nr_draft', d.d || null); break;
     case 'adm': set('nr_adm', d.token || ''); break;
     case 'a2hs': a2Go(); break;
     case 'push-get': send(Object.assign({ t: 'push' }, await pushState())); break;
     case 'push-on': send(Object.assign({ t: 'push' }, await pushOn())); break;
     case 'push-off': send(Object.assign({ t: 'push' }, await pushOff())); break;
-    case 'me-on': { const m = await meOn(); set('nr_me', m.ok ? { ok: true } : null); send(Object.assign({ t: 'me-push' }, m)); break; }
+    case 'me-on': { const m = await meOn(); set('nr_me2', m.ok ? { ok: true } : null); send(Object.assign({ t: 'me-push' }, m)); break; }
   }
 });
 
@@ -174,31 +176,66 @@ async function pushState(err) {
   let tags = {}; try { tags = OS.User.getTags() || {} } catch (e) {}
   return { perm: !!OS.Notifications.permission, sub: !!OS.User.PushSubscription.optedIn, adm: tags.role === 'admin', needInstall, err: err || '' };
 }
+/* 알림 허용은 '손가락으로 누른 바로 그 순간'에 물어야 휴대폰이 받아줌.
+   → 주문 앱 안 버튼이 아니라, 바깥(이 페이지)에 안내창을 띄우고 그 버튼에서 바로 허용을 요청 */
+function permSheet(title, desc) {
+  return new Promise(done => {
+    const old = $('pmsheet'); if (old) old.remove();
+    const bg = document.createElement('div'); bg.className = 'sheet-bg'; bg.id = 'pmsheet';
+    bg.innerHTML = `<div class="sheet" role="dialog" aria-label="${title}">
+      <div class="sh-top"><img src="apple-touch-icon.png" alt=""><div><b>${title}</b><span>${desc}</span></div></div>
+      <div class="sh-note">다음 화면에서 <b>허용</b>을 눌러 주세요. 앱을 닫아 두어도 알림이 와요.</div>
+      <div class="sh-btns"><button class="off" id="pmNo">나중에</button><button class="ok" id="pmOk" disabled>준비 중…</button></div></div>`;
+    document.body.appendChild(bg);
+    const ok = $('pmOk'), close = r => { bg.remove(); done(r) };
+    $('pmNo').onclick = () => close({ cancel: true });
+    bg.onclick = e => { if (e.target === bg) close({ cancel: true }) };
+    loadOS().then(() => {
+      if (!OS) { close({ err: '알림 기능을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.' }); return }
+      ok.disabled = false; ok.textContent = '알림 허용하기';
+    });
+    ok.onclick = () => {
+      ok.disabled = true; ok.textContent = '확인 중…';
+      // ★ 기다리는 것 없이 '바로' 허용 요청 (아이폰·안드로이드 모두 이래야 창이 뜸)
+      let p;
+      try { p = (window.Notification && Notification.permission !== 'granted') ? Notification.requestPermission() : Promise.resolve('granted') } catch (e) { p = Promise.resolve(window.Notification ? Notification.permission : 'denied') }
+      Promise.resolve(p).then(r => close({ perm: r === 'granted' || (window.Notification && Notification.permission === 'granted') })).catch(() => close({ perm: false }));
+    };
+  });
+}
+/* 허용 뒤 OneSignal에 구독 + 이름표(태그) 달기, 실제로 구독됐는지 확인 */
+async function subscribe(tagK, tagV) {
+  await OS.User.PushSubscription.optIn();
+  for (let i = 0; i < 20 && !(OS.User.PushSubscription.optedIn && OS.User.PushSubscription.id); i++) await new Promise(r => setTimeout(r, 300));
+  OS.User.addTag(tagK, tagV);
+  return !!OS.User.PushSubscription.optedIn;
+}
+const BLOCKED = IS_IOS ? '알림이 꺼져 있어요. 아이폰 설정 → 알림 → 누리이음 ORDER → 알림 허용을 켜 주세요.'
+                       : '알림이 차단돼 있어요. 크롬 주소창 옆 자물쇠(또는 ⋮ → 설정 → 사이트 설정 → 알림)에서 허용해 주세요.';
 async function pushOn() {
-  await loadOS();
   if (IS_IOS && !IS_STANDALONE) return pushState();
-  if (!OS) return pushState();
-  try {
-    await OS.Notifications.requestPermission();
-    if (!OS.Notifications.permission) return pushState('알림이 차단돼 있어요. 휴대폰 설정에서 이 앱(또는 브라우저)의 알림을 허용해 주세요.');
-    await OS.User.PushSubscription.optIn();
-    OS.User.addTag('role', 'admin');
-    await new Promise(r => setTimeout(r, 900));
-  } catch (e) { return pushState('알림을 켜지 못했어요: ' + e.message) }
+  const r = await permSheet('주문 알림 받기', '새 주문이 들어오면 이 폰으로 알려 드려요');
+  if (r.cancel) return pushState();
+  if (r.err) return pushState(r.err);
+  if (!r.perm) return pushState(BLOCKED);
+  try { if (!await subscribe('role', 'admin')) return pushState('알림 등록이 끝나지 않았어요. 한 번 더 눌러 주세요.') }
+  catch (e) { return pushState('알림을 켜지 못했어요: ' + e.message) }
   return pushState();
 }
 /* 직원 — 이 폰에서 넣은 주문이 출발하면 알림 (기기 번호로 구분) */
 async function meOn() {
   if (IS_IOS && !IS_STANDALONE) return { ok: false, needInstall: true };
-  await loadOS();
-  if (!OS) return { ok: false, err: '알림 기능을 불러오지 못했어요. 잠시 후 다시 눌러 주세요.' };
-  try {
-    await OS.Notifications.requestPermission();
-    if (!OS.Notifications.permission) return { ok: false, err: '알림이 꺼져 있어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요.' };
-    await OS.User.PushSubscription.optIn();
-    OS.User.addTag('dev', dev);
-    return { ok: true };
-  } catch (e) { return { ok: false, err: '알림을 켜지 못했어요: ' + e.message } }
+  const r = await permSheet('출발 알림 받기', '주문하신 음료가 출발하면 알려 드려요');
+  if (r.cancel) return { ok: false, cancel: true };
+  if (r.err) return { ok: false, err: r.err };
+  if (!r.perm) return { ok: false, err: BLOCKED };
+  try { if (!await subscribe('dev', dev)) return { ok: false, err: '알림 등록이 끝나지 않았어요. 한 번 더 눌러 주세요.' } }
+  catch (e) { return { ok: false, err: '알림을 켜지 못했어요: ' + e.message } }
+  return { ok: true };
+}
+/* 이미 허용한 폰은 열 때마다 조용히 이름표 다시 확인 (허용 창은 안 뜸) */
+if (get('nr_me2', null) && window.Notification && Notification.permission === 'granted' && !(IS_IOS && !IS_STANDALONE)) {
+  setTimeout(() => loadOS().then(() => { try { if (OS && OS.User.PushSubscription.optedIn) OS.User.addTag('dev', dev) } catch (e) {} }), 4000);
 }
 async function pushOff() {
   await loadOS();
