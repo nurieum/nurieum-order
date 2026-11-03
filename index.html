@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <title>누리이음 ORDER</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -15,6 +15,8 @@
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://n-script.googleusercontent.com">
 <style>
+html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
+button{touch-action:manipulation}
 :root{--navy:#0B2A5B;--blue:#0058B0;--sky:#EAF2FC;--yellow:#F5C400;--red:#D7141A;--ink:#1B1F27;--gray:#6A7280;--line:#E1E5EB;--bg:#F4F6F9}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:#fff;overflow:hidden}
@@ -174,6 +176,7 @@ async function pushState(err) {
   const needInstall = IS_IOS && !IS_STANDALONE;
   if (!OS) return { perm: false, sub: false, adm: false, needInstall, err: err || (needInstall ? '' : '알림 기능을 불러오지 못했어요. 새로고침해 주세요.') };
   let tags = {}; try { tags = OS.User.getTags() || {} } catch (e) {}
+  if (tags.role === 'admin' && OS.User.PushSubscription.optedIn) set('nr_admpush', 1);
   return { perm: !!OS.Notifications.permission, sub: !!OS.User.PushSubscription.optedIn, adm: tags.role === 'admin', needInstall, err: err || '' };
 }
 /* 알림 허용은 '손가락으로 누른 바로 그 순간'에 물어야 휴대폰이 받아줌.
@@ -216,11 +219,11 @@ const BLOCKED = IS_IOS ? '알림이 꺼져 있어요. 아이폰 설정 → 알�
 async function pushOn() {
   if (IS_IOS && !IS_STANDALONE) return pushState();
   if (window.Notification && Notification.permission === 'denied') return pushState(BLOCKED);
-  const r = await permSheet('주문 알림 받기', '새 주문이 들어오면 이 폰으로 알려 드려요');
+  const r = await permSheet('관리자 주문 알림 받기', '새 주문과 주문 취소를 이 폰으로 알려 드려요');
   if (r.cancel) return pushState();
   if (r.err) return pushState(r.err);
   if (!r.perm) return pushState(BLOCKED);
-  try { if (!await subscribe('role', 'admin')) return pushState('알림 등록이 끝나지 않았어요. 한 번 더 눌러 주세요.') }
+  try { if (!await subscribe('role', 'admin')) return pushState('알림 등록이 끝나지 않았어요. 한 번 더 눌러 주세요.'); set('nr_admpush', 1) }
   catch (e) { return pushState('알림을 켜지 못했어요: ' + e.message) }
   return pushState();
 }
@@ -228,7 +231,7 @@ async function pushOn() {
 async function meOn() {
   if (IS_IOS && !IS_STANDALONE) return { ok: false, needInstall: true };
   if (window.Notification && Notification.permission === 'denied') return { ok: false, blocked: true, err: BLOCKED };
-  const r = await permSheet('딜리버리 알림 받기', '음료가 출발할 때와 전달이 끝났을 때 알려 드려요');
+  const r = await permSheet('주문 알림 받기', '주문 확정, 딜리버리 시작, 전달 완료를 알려 드려요');
   if (r.cancel) return { ok: false, cancel: true };
   if (r.err) return { ok: false, err: r.err };
   if (!r.perm) return { ok: false, err: BLOCKED };
@@ -239,12 +242,30 @@ async function meOn() {
 /* 이미 허용한 폰은 열 때마다 조용히 이름표 다시 확인 (허용 창은 안 뜸) */
 if (get('nr_me2', null) && window.Notification && Notification.permission === 'granted' && !(IS_IOS && !IS_STANDALONE)) {
   setTimeout(() => loadOS().then(() => {
-    try { if (OS && OS.User.PushSubscription.optedIn) { OS.User.addTag('dev', dev); if (OS.User.PushSubscription.id) send({ t: 'me-sid', sid: OS.User.PushSubscription.id }) } } catch (e) {}
+    (async () => {
+      try {
+        if (!OS) return;
+        // 구독이 풀려 있으면 (권한은 이미 허용이라 창 없이) 다시 연결
+        if (!OS.User.PushSubscription.optedIn) { await OS.User.PushSubscription.optIn(); for (let i = 0; i < 20 && !OS.User.PushSubscription.id; i++) await new Promise(r => setTimeout(r, 300)) }
+        if (OS.User.PushSubscription.optedIn) { OS.User.addTag('dev', dev); if (OS.User.PushSubscription.id) send({ t: 'me-sid', sid: OS.User.PushSubscription.id }) }
+      } catch (e) {}
+    })();
   }), 4000);
+}
+/* 관리자 폰도 열 때마다 조용히 연결 상태 확인 (구독이 풀렸으면 다시 연결, 관리자 이름표 유지) */
+if (get('nr_admpush', 0) && window.Notification && Notification.permission === 'granted' && !(IS_IOS && !IS_STANDALONE)) {
+  setTimeout(() => loadOS().then(async () => {
+    try {
+      if (!OS) return;
+      if (!OS.User.PushSubscription.optedIn) { await OS.User.PushSubscription.optIn(); for (let i = 0; i < 20 && !OS.User.PushSubscription.id; i++) await new Promise(r => setTimeout(r, 300)) }
+      if (OS.User.PushSubscription.optedIn) OS.User.addTag('role', 'admin');
+    } catch (e) {}
+  }), 5000);
 }
 async function pushOff() {
   await loadOS();
   try { if (OS) { await OS.User.PushSubscription.optOut(); OS.User.removeTag('role') } } catch (e) {}
+  set('nr_admpush', 0);
   await new Promise(r => setTimeout(r, 500));
   return pushState();
 }
