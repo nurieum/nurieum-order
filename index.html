@@ -44,12 +44,13 @@ body{font-family:'Noto Sans KR',-apple-system,'Apple SD Gothic Neo','Malgun Goth
 .sheet li{display:flex;gap:12px;align-items:center;padding:13px 2px;border-bottom:1px solid var(--line);font-size:15px;word-break:keep-all}
 .sheet li em{flex:0 0 26px;height:26px;background:var(--navy);color:#fff;font-style:normal;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
 .sheet li i{font-style:normal;display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:24px;padding:0 6px;border:1px solid var(--line);font-size:13px;font-weight:700;color:var(--navy);margin:0 2px;vertical-align:middle}
-.sh-note{font-size:12.5px;color:var(--gray);background:var(--bg);padding:10px 12px;margin-bottom:14px;word-break:keep-all}
-.sh-btns{display:flex;gap:8px}
+.sh-note{font-size:13px;color:var(--gray);background:var(--bg);padding:10px 12px;margin-bottom:14px;word-break:keep-all}
+.sh-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .sh-btns button{flex:1;height:50px;font-size:15px;font-weight:700;border:0;font-family:inherit}
 .sh-btns .ok{background:var(--navy);color:#fff}
 .sh-btns .ok:disabled{opacity:.55}
-.sh-btns .off{flex:0 0 40%;border:1px solid var(--line);color:var(--gray);background:#fff}
+.sh-btns .off{color:var(--ink);background:#fff;box-shadow:0 1px 3px rgba(11,42,91,.10),0 3px 10px rgba(11,42,91,.06)}
+.sh-btns .ok{box-shadow:0 3px 8px rgba(11,42,91,.22)}
 </style>
 </head>
 <body>
@@ -134,7 +135,7 @@ function a2Sheet(kind) {
   const bg = document.createElement('div'); bg.className = 'sheet-bg'; bg.id = 'a2sheet';
   bg.onclick = e => { if (e.target === bg) bg.remove() };
   bg.innerHTML = `<div class="sheet" role="dialog" aria-label="홈 화면에 추가 방법">
-    <div class="sh-top"><img src="apple-touch-icon.png" alt=""><div><b>홈 화면에 추가하는 방법</b><span>한 번만 해 두면 다음부터 아이콘으로 열려요</span></div></div>
+    <div class="sh-top"><img src="apple-touch-icon.png" alt=""><div><b>홈 화면에 추가하는 방법</b><span>추가 후 아이콘으로 바로 실행</span></div></div>
     <ol>${steps.map((s, i) => `<li><em>${i + 1}</em><span>${s}</span></li>`).join('')}</ol>
     <div class="sh-note">${note}</div>
     <div class="sh-btns"><button class="off" id="a2off">다시 보지 않기</button><button class="ok" id="a2ok">확인</button></div></div>`;
@@ -187,7 +188,7 @@ function permSheet(title, desc) {
     const bg = document.createElement('div'); bg.className = 'sheet-bg'; bg.id = 'pmsheet';
     bg.innerHTML = `<div class="sheet" role="dialog" aria-label="${title}">
       <div class="sh-top"><img src="apple-touch-icon.png" alt=""><div><b>${title}</b><span>${desc}</span></div></div>
-      <div class="sh-note">다음 화면에서 <b>허용</b>을 눌러 주세요. 앱을 닫아 두어도 알림이 와요.</div>
+      <div class="sh-note" style="white-space:nowrap">다음 화면에서 <b>허용</b>을 누르세요.</div>
       <div class="sh-btns"><button class="off" id="pmNo">나중에</button><button class="ok" id="pmOk" disabled>준비 중…</button></div></div>`;
     document.body.appendChild(bg);
     const ok = $('pmOk'), close = r => { bg.remove(); done(r) };
@@ -219,7 +220,7 @@ const BLOCKED = IS_IOS ? '알림이 꺼져 있어요. 아이폰 설정 → 알�
 async function pushOn() {
   if (IS_IOS && !IS_STANDALONE) return pushState();
   if (window.Notification && Notification.permission === 'denied') return pushState(BLOCKED);
-  const r = await permSheet('관리자 주문 알림 받기', '새 주문과 주문 취소를 이 폰으로 알려 드려요');
+  const r = await permSheet('관리자 주문 알림 받기', '새 주문·주문 취소 시 알려 드려요');
   if (r.cancel) return pushState();
   if (r.err) return pushState(r.err);
   if (!r.perm) return pushState(BLOCKED);
@@ -231,7 +232,7 @@ async function pushOn() {
 async function meOn() {
   if (IS_IOS && !IS_STANDALONE) return { ok: false, needInstall: true };
   if (window.Notification && Notification.permission === 'denied') return { ok: false, blocked: true, err: BLOCKED };
-  const r = await permSheet('주문 알림 받기', '주문 확정, 딜리버리 시작, 전달 완료를 알려 드려요');
+  const r = await permSheet('주문 알림 받기', '주문 확정·출발·전달 완료 시 알려 드려요');
   if (r.cancel) return { ok: false, cancel: true };
   if (r.err) return { ok: false, err: r.err };
   if (!r.perm) return { ok: false, err: BLOCKED };
