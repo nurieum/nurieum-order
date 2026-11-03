@@ -131,13 +131,13 @@ function a2Sheet(kind) {
     android: ['오른쪽 위 <i>⋮</i> 를 누르세요', '<i>홈 화면에 추가</i> 를 누르세요', '<i>추가</i> 또는 <i>설치</i> 를 누르세요'],
     inapp: ['오른쪽 위(또는 아래) <i>⋯</i> 를 누르세요', '<i>다른 브라우저로 열기</i> 를 누르세요', '열린 화면에서 <i>추가하기</i> 를 누르세요']
   }[kind];
-  const note = { ios: '※ <b>공유 ↑</b>가 바로 보이면 1번은 건너뛰세요.', android: '※ <b>크롬</b>에서 열어 주세요.', inapp: '※ 앱 안의 브라우저(카톡·네이버 등)에서는 홈 화면에 추가할 수 없어요.' }[kind];
+  const note = { ios: '', android: '※ <b>크롬</b>에서 열어 주세요.', inapp: '※ 앱 안의 브라우저(카톡·네이버 등)에서는 홈 화면에 추가할 수 없어요.' }[kind];
   const bg = document.createElement('div'); bg.className = 'sheet-bg'; bg.id = 'a2sheet';
   bg.onclick = e => { if (e.target === bg) bg.remove() };
   bg.innerHTML = `<div class="sheet" role="dialog" aria-label="홈 화면에 추가 방법">
     <div class="sh-top"><img src="apple-touch-icon.png" alt=""><div><b>홈 화면에 앱 추가</b></div></div>
     <ol>${steps.map((s, i) => `<li><em>${i + 1}</em><span>${s}</span></li>`).join('')}</ol>
-    <div class="sh-note">${note}</div>
+    ${note ? `<div class="sh-note">${note}</div>` : ''}
     <div class="sh-btns"><button class="off" id="a2off">다시 보지 않기</button><button class="ok" id="a2ok">확인</button></div></div>`;
   document.body.appendChild(bg);
   $('a2off').onclick = () => { a2Done(); bg.remove() };
